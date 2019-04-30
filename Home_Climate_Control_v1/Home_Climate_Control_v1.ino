@@ -11,6 +11,7 @@
 /** Pins configurations **/
 #define IR_REMOTE_PIN 6
 #define DHT_11_PIN 7
+#define BUZZER 4
 
 // Temperature LED Pins
 #define T_R 13
@@ -27,11 +28,16 @@ int tLED[] = {T_R, T_G, T_B};
 int hLED[] = {H_R, H_G, H_B};
 unsigned long irValue = 0;
 
-float measurements[] = {15.00, 0.00};
+int measurements[] = {0, 0};
 
-bool debug = true;
-bool allowedLights = true;
+bool tOrHChange = true;
+bool alChange = true;
+bool dndChange = true;
+
 bool dnd = false;
+bool debug = true;
+bool modeSwitch = false;
+bool allowedLights = true;
 
 /** Classes Init **/
 DHT dht(DHT_11_PIN, DHT11);
@@ -52,12 +58,23 @@ byte degreeChar[] = {
         0x00
 };
 
+byte humidityChar[] = {
+        0x00,
+        0x04,
+        0x0E,
+        0x1F,
+        0x1F,
+        0x1F,
+        0x0E,
+        0x00
+};
+
 /** Custom Characters End **/
 
 /**
- *
- * @param position
- */
+
+   @param position
+*/
 void turnBackLight(bool position = true) {
     !allowedLights ?
     (position ? liquidCrystal.backlight() : liquidCrystal.noBacklight()) :
@@ -65,59 +82,76 @@ void turnBackLight(bool position = true) {
 }
 
 /**
- *
- * Sets the LCD display text
- *
- * @param text
- * @param cursorPos
- * @param cursorLine
- * @param clear
- */
+
+   Sets the LCD display text
+
+   @param text
+   @param cursorPos
+   @param cursorLine
+   @param clear
+*/
 void setDisplayText(long text, int cursorPos = 0, int cursorLine = 0, bool clear = true) {
-    if (clear) { liquidCrystal.clear(); }
+    if (clear) {
+        liquidCrystal.clear();
+    }
     liquidCrystal.setCursor(cursorPos, cursorLine);
-    liquidCrystal.println(text);
+    liquidCrystal.print(text);
 }
 
 void setDisplayText(bool text, int cursorPos = 0, int cursorLine = 0, bool clear = true, char *yes = "Yes",
                     char *no = "No") {
-    if (clear) { liquidCrystal.clear(); }
+    if (clear) {
+        liquidCrystal.clear();
+    }
     liquidCrystal.setCursor(cursorPos, cursorLine);
-    liquidCrystal.println(text ? yes : no);
+    liquidCrystal.print(text ? yes : no);
 }
 
 void setDisplayText(char *text, int cursorPos = 0, int cursorLine = 0, bool clear = true) {
-    if (clear) { liquidCrystal.clear(); }
+    if (clear) {
+        liquidCrystal.clear();
+    }
     liquidCrystal.setCursor(cursorPos, cursorLine);
-    liquidCrystal.println(text);
+    liquidCrystal.print(text);
 }
 
 void setDisplayText(int text, int cursorPos = 0, int cursorLine = 0, bool clear = true) {
-    if (clear) { liquidCrystal.clear(); }
+    if (clear) {
+        liquidCrystal.clear();
+    }
     liquidCrystal.setCursor(cursorPos, cursorLine);
-    liquidCrystal.write(text);
+    liquidCrystal.print(text);
 }
 
 void setDisplayText(float text, int cursorPos = 0, int cursorLine = 0, bool clear = true) {
-    if (clear) { liquidCrystal.clear(); }
+    if (clear) {
+        liquidCrystal.clear();
+    }
     liquidCrystal.setCursor(cursorPos, cursorLine);
-    liquidCrystal.write(text);
+    liquidCrystal.print(text);
 }
 
 void setDisplayText(unsigned long int text, int cursorPos = 0, int cursorLine = 0, bool clear = true) {
-    if (clear) { liquidCrystal.clear(); }
+    if (clear) {
+        liquidCrystal.clear();
+    }
     liquidCrystal.setCursor(cursorPos, cursorLine);
-    liquidCrystal.println(text);
+    liquidCrystal.print(text);
+}
+
+void setDisplayTextChar(int index, int cursorPos = 0, int cursorLine = 0) {
+    liquidCrystal.setCursor(cursorPos, cursorLine);
+    liquidCrystal.write(index);
 }
 
 /**
- * Sets LED Color
- *
- * @param rgb
- * @param red
- * @param green
- * @param blue
- */
+   Sets LED Color
+
+   @param rgb
+   @param red
+   @param green
+   @param blue
+*/
 void setLED(int *rgb = {}, int red = 0, int green = 0, int blue = 0) {
     analogWrite(rgb[0], red);
     analogWrite(rgb[1], green);
@@ -125,30 +159,34 @@ void setLED(int *rgb = {}, int red = 0, int green = 0, int blue = 0) {
 }
 
 void setCustomCharacters() {
-    liquidCrystal.createChar("dg_char", degreeChar);
+    liquidCrystal.createChar(0x1, degreeChar);
+    liquidCrystal.createChar(0x2, humidityChar);
 }
 
-float getTemperature() {
+int getTemperature() {
     return dht.readTemperature();
 }
 
-float getHumidity() {
+int getHumidity() {
     return dht.readHumidity();
 }
 
 void setTemperature() {
-    float temperatureLevel = getTemperature();
+    int temperatureLevel = getTemperature();
+
 
     if (measurements[0] != temperatureLevel && !isnan(temperatureLevel)) {
         measurements[0] = temperatureLevel;
+        tOrHChange = true;
     }
 }
 
 void setHumidity() {
-    float humidityLevel = getHumidity();
+    int humidityLevel = getHumidity();
 
     if (measurements[1] != humidityLevel && !isnan(humidityLevel)) {
         measurements[1] = humidityLevel;
+        tOrHChange = true;
     }
 }
 
@@ -163,35 +201,56 @@ void setPinModes() {
     pinMode(H_R, OUTPUT);
     pinMode(H_G, OUTPUT);
     pinMode(H_B, OUTPUT);
+    pinMode(BUZZER, OUTPUT);
 }
 
-void switchMode() {
-    liquidCrystal.clear();
+void switchMode(bool clear = false) {
+    if (clear) {
+        liquidCrystal.clear();
+    }
 
-    Serial.println(mode);
+    if (modeSwitch) {
+        Serial.print("Switched to Mode No.");
+        Serial.println(mode);
+    }
 
     switch (mode) {
         case 1:
-            setDisplayText("Dashboard");
-            setDisplayText(measurements[0], 0, 1, false);
-            setDisplayText(0001, 4, 1, false);
-            setDisplayText("C", 5, 1, false);
+            if (tOrHChange || modeSwitch) {
+                setDisplayText("Dashboard");
+                setDisplayText(measurements[0], 0, 1, false);
+                setDisplayTextChar(0x1, 3, 1);
+                setDisplayText("C", 4, 1, false);
 
+                setDisplayTextChar(0x2, 11, 1);
+                setDisplayText(measurements[1], 13, 1, false);
+                setDisplayText("%", 15, 1, false);
+
+                tOrHChange = false;
+            }
             break;
         case 2:
-            setDisplayText("Settings", 0, 0);
-            setDisplayText("AL : ", 0, 1, false);
-            setDisplayText(allowedLights, 5, 1, false);
+            if (alChange || modeSwitch) {
+                setDisplayText("Settings", 0, 0);
+                setDisplayText("AL : ", 0, 1, false);
+                setDisplayText(allowedLights, 5, 1, false);
+                alChange = false;
+            }
             break;
         case 3:
-            setDisplayText("DND Mode");
-            setDisplayText(dnd, 0, 1, false, "Active", "Inactive");
+            if (dndChange || modeSwitch) {
+                setDisplayText("DND Mode");
+                setDisplayText(dnd, 0, 1, false, "Active", "Inactive");
+                dndChange = false;
+            }
             break;
         default:
             mode = 1;
             switchMode();
             break;
     }
+
+    modeSwitch = false;
 }
 
 void irRemoteDecode() {
@@ -202,32 +261,46 @@ void irRemoteDecode() {
         liquidCrystal.setCursor(0, 0);
         liquidCrystal.clear();
 
+        tone(BUZZER, 250, 200);
+
         switch (IR_Decode.value) {
             case 0xFFA25D: // CH-
                 mode = mode == 1 ? 3 : mode - 1;
-                Serial.println("CH-");
+                Serial.println("Switch mode back");
+                modeSwitch = true;
                 break;
             case 0xFF629D: // CH
                 mode = 1;
-                Serial.println("CH");
+                Serial.println("Go to the Dashboard");
+                modeSwitch = true;
                 break;
             case 0xFFE21D: // CH+
                 mode = mode == 3 ? 1 : mode + 1;
-                Serial.println("CH+");
+                Serial.println("Switch mode forward");
+                modeSwitch = true;
                 break;
             case 0xFFE01F: // -
                 turnBackLight(false);
+                Serial.println("Turn the backlight off");
                 break;
             case 0xFFA857: // +
                 turnBackLight(true);
+                Serial.println("Turn the backlight on");
                 break;
             case 0xFF906F: // EQ
                 switch (mode) {
                     default:
                         allowedLights = !allowedLights;
+                        alChange = true;
+                        Serial.print("Force Lights Allowance : ");
+                        Serial.println(allowedLights ? "Yes" : "No");
                         break;
                     case 3:
                         dnd = !dnd;
+                        dndChange = true;
+                        Serial.print("Do Not Disturb Mode : ");
+                        Serial.println(dnd ? "Yes" : "No");
+                        break;
                 }
                 break;
             case 0xFF22DD: // |<<
@@ -237,7 +310,18 @@ void irRemoteDecode() {
 
                 break;
             case 0xFFC23D: // >|
+                switch (mode) {
+                    case 1:
+                        Serial.println("Temperature force re-fresh");
+                        setTemperature();
 
+                        Serial.println("Humidity force re-fresh");
+                        setHumidity();
+                        break;
+                    default:
+                        Serial.println("No Action is defined for this mode");
+                        break;
+                }
                 break;
 
             case 0xFF6897: // 0
@@ -308,4 +392,7 @@ void loop() {
 
     setTemperature();
     setHumidity();
+
+    switchMode(false);
+    noInterrupts();
 }
